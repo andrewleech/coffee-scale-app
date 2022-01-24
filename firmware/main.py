@@ -7,8 +7,8 @@ import micropython
 from art import BATTERY, DOT, GRAM, LOGO, show_digit, show_sprite
 from ble_scales import BLEScales
 from filtering import KalmanFilter
-from hx711 import HX711
-from machine import ADC, SoftI2C, Pin
+from hx711_spi import HX711
+from machine import ADC, SoftI2C, Pin, SPI
 from ssd1306 import SSD1306_I2C
 try:
     from config import *
@@ -35,10 +35,14 @@ vsense_pin = ADC(Pin(VSENSE_PIN))
 vsense_pin.atten(ADC.ATTN_11DB)
 bat_percent = 0
 
-hx = HX711(dout=HX711_0_DOUT, pd_sck=HX711_0_CLK, gain=HX711_GAIN)
+hx_spi0 = SPI(HX711_0_SPI_ID, baudrate=1000000, polarity=0, phase=0, 
+              sck=Pin(HX711_0_SSCK), mosi=Pin(HX711_0_CLK), miso=Pin(HX711_0_DOUT))
+
+hx = HX711(pd_sck=Pin(HX711_0_CLK), dout=Pin(HX711_0_DOUT), spi=hx_spi0, gain=HX711_GAIN)
+
 hx.set_scale(1544.667)
 hx.tare()
-kf.update_estimate(hx.get_units(times=1))
+kf.update_estimate(hx.get_units())
 filtered_weight = 0
 
 
@@ -67,7 +71,7 @@ def main():
 
     last = 0
     while True:
-        weight = hx.get_units(times=1)
+        weight = hx.get_units()
         filtered_weight = kf.update_estimate(weight)
         now = time.ticks_ms()
         if time.ticks_diff(now, last) > 100:
