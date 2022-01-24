@@ -71,6 +71,8 @@ class HX711:
         return sum / times
 
     def read_lowpass(self):
+        if not self.time_constant:
+            return self.read()
         self.filtered += self.time_constant * (self.read() - self.filtered)
         return self.filtered
 
@@ -92,7 +94,7 @@ class HX711:
     def set_time_constant(self, time_constant=None):
         if time_constant is None:
             return self.time_constant
-        elif 0 < time_constant < 1.0:
+        elif 0 <= time_constant < 1.0:
             self.time_constant = time_constant
 
     def power_down(self):
