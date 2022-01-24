@@ -8,12 +8,19 @@ from art import BATTERY, DOT, GRAM, LOGO, show_digit, show_sprite
 from ble_scales import BLEScales
 from filtering import KalmanFilter
 from hx711 import HX711
-from machine import ADC, I2C, Pin
+from machine import ADC, SoftI2C, Pin
 from ssd1306 import SSD1306_I2C
+try:
+    from config import *
+except ImportError:
+    from config_def import *
 
 micropython.alloc_emergency_exception_buf(100)
 
-i2c = I2C(-1, scl=Pin(22), sda=Pin(21))
+i2c = SoftI2C(
+    scl=Pin(SCREEN_I2C_SCL), 
+    sda=Pin(SCREEN_I2C_SDA)
+)
 screen = SSD1306_I2C(width=128, height=32, i2c=i2c)
 screen.fill(0)
 show_sprite(screen, LOGO, 51, 1)
@@ -23,12 +30,12 @@ ble = bluetooth.BLE()
 print('bt loaded')
 scales = BLEScales(ble)
 kf = KalmanFilter(0.03, q=0.1)
-button_pin = Pin(0, Pin.IN, Pin.PULL_UP)
-vsense_pin = ADC(Pin(34))
+button_pin = Pin(BUTTON_PIN, Pin.IN, Pin.PULL_UP)
+vsense_pin = ADC(Pin(VSENSE_PIN))
 vsense_pin.atten(ADC.ATTN_11DB)
 bat_percent = 0
 
-hx = HX711(dout=14, pd_sck=13, gain=64)
+hx = HX711(dout=HX711_0_DOUT, pd_sck=HX711_0_CLK, gain=HX711_GAIN)
 hx.set_scale(1544.667)
 hx.tare()
 kf.update_estimate(hx.get_units(times=1))
