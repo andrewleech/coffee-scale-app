@@ -1,9 +1,9 @@
 """Main file running on the scales ESP32."""
 import time
 
-import _thread
 import bluetooth
 import micropython
+import uasyncio as asyncio
 from art import BATTERY, DOT, GRAM, LOGO, show_digit, show_sprite
 from ble_scales import BLEScales
 from filtering import KalmanFilter
@@ -14,6 +14,7 @@ try:
     from config import *
 except ImportError:
     from config_def import *
+
 
 micropython.alloc_emergency_exception_buf(100)
 
@@ -52,7 +53,7 @@ def tare_callback(pin):
     kf.last_estimate = 0.0
 
 
-def main():
+async def main():
     global filtered_weight, bat_percent, scales, button_pin, hx, kf
 
     # uncomment next 2 lines to get a load cell reading for calibration (in the console/serial)
@@ -65,12 +66,13 @@ def main():
     bat_percent = adc_to_percent(battery_sum / 10)
     scales.set_battery_level(bat_percent)
 
-    _thread.start_new_thread(display_weight, ())
+    asyncio.create_task(display_weight())
 
     button_pin.irq(trigger=Pin.IRQ_FALLING, handler=tare_callback)
 
     last = 0
     while True:
+        await asyncio.sleep_ms(10)
         weight = hx.get_units()
         filtered_weight = kf.update_estimate(weight)
         now = time.ticks_ms()
@@ -103,9 +105,10 @@ def adc_to_percent(v_adc):
     return 0
 
 
-def display_weight():
+async def display_weight():
     global filtered_weight, bat_percent
     while True:
+        await asyncio.sleep_ms(100)
         screen.fill(0)
         rounded_weight = round(filtered_weight / 0.05) * 0.05
         string = '{:.2f}'.format(rounded_weight)
@@ -135,5 +138,4 @@ def display_weight():
         screen.show()
 
 
-if __name__ == "__main__":
-    main()
+asyncio.run(main())
