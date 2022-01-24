@@ -38,9 +38,9 @@ bat_percent = 0
 
 hx_spi0 = SPI(HX711_0_SPI_ID, baudrate=1000000, polarity=0, phase=0, 
               sck=Pin(HX711_0_SSCK), mosi=Pin(HX711_0_CLK), miso=Pin(HX711_0_DOUT))
-
 hx = HX711(pd_sck=Pin(HX711_0_CLK), dout=Pin(HX711_0_DOUT), spi=hx_spi0, gain=HX711_GAIN)
 
+hx.set_time_constant(0)
 hx.set_scale(1544.667)
 hx.tare()
 kf.update_estimate(hx.get_units())
@@ -49,6 +49,7 @@ filtered_weight = 0
 
 def tare_callback(pin):
     global hx, kf
+    print("tare")
     hx.tare(times=3)
     kf.last_estimate = 0.0
 
