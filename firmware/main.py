@@ -36,26 +36,42 @@ vsense_pin = ADC(Pin(VSENSE_PIN))
 vsense_pin.atten(ADC.ATTN_11DB)
 bat_percent = 0
 
-hx_spi0 = SPI(HX711_0_SPI_ID, baudrate=1000000, polarity=0, phase=0, 
-              sck=Pin(HX711_0_SSCK), mosi=Pin(HX711_0_CLK), miso=Pin(HX711_0_DOUT))
-hx = HX711(pd_sck=Pin(HX711_0_CLK), dout=Pin(HX711_0_DOUT), spi=hx_spi0, gain=HX711_GAIN)
+hx = []
 
-hx.set_time_constant(0)
-hx.set_scale(1544.667)
-hx.tare()
-kf.update_estimate(hx.get_units())
-filtered_weight = 0
+def get_weight():
+    return sum([_hx.get_units() for _hx in hx])
+
+
+def hx_configure():
+    global hx, kf, filtered_weight
+
+    for hx_conf in HX711_CONF:
+        _spi = SPI(hx_conf.SPI_ID, baudrate=1000000, polarity=0, phase=0, 
+                    sck=Pin(hx_conf.SSCK), mosi=Pin(hx_conf.CLK), miso=Pin(hx_conf.DOUT))
+        _hx = HX711(pd_sck=Pin(hx_conf.CLK), dout=Pin(hx_conf.DOUT), spi=_spi, gain=HX711_GAIN)
+        _hx.set_time_constant(0)
+        _hx.set_scale(1544.667)
+        _hx.tare()
+        hx.append(
+            _hx
+        )
+
+    filtered_weight = 0
+    kf.update_estimate(get_weight())
 
 
 def tare_callback(pin):
     global hx, kf
     print("tare")
-    hx.tare(times=3)
+    for _hx in hx:
+        _hx.tare(times=3)
     kf.last_estimate = 0.0
 
 
 async def main():
     global filtered_weight, bat_percent, scales, button_pin, hx, kf
+
+    hx_configure()
 
     # uncomment next 2 lines to get a load cell reading for calibration (in the console/serial)
     # while True:
@@ -74,7 +90,7 @@ async def main():
     last = 0
     while True:
         await asyncio.sleep_ms(10)
-        weight = hx.get_units()
+        weight = get_weight()
         filtered_weight = kf.update_estimate(weight)
         now = time.ticks_ms()
         if time.ticks_diff(now, last) > 100:
