@@ -1,102 +1,78 @@
 """Main file running on the scales ESP32."""
+import gc
 import time
-
 import bluetooth
 import micropython
 import uasyncio as asyncio
 from art import BATTERY, DOT, GRAM, LOGO, show_digit, show_sprite
 from ble_scales import BLEScales
 from filtering import KalmanFilter
-from hx711_spi import HX711
-from machine import ADC, SoftI2C, Pin, SPI
+from hx711 import HX711
+from machine import ADC, I2C, Pin, SPI
 from ssd1306 import SSD1306_I2C
 try:
     from config import *
 except ImportError:
     from config_def import *
 
+print("import finished")
+micropython.alloc_emergency_exception_buf(160)
 
-micropython.alloc_emergency_exception_buf(100)
-
-i2c = SoftI2C(
+i2c = I2C(
+    0,
     scl=Pin(SCREEN_I2C_SCL), 
     sda=Pin(SCREEN_I2C_SDA)
 )
+print("i2c")
 screen = SSD1306_I2C(width=128, height=32, i2c=i2c)
 screen.fill(0)
 show_sprite(screen, LOGO, 51, 1)
 screen.show()
+print("screen")
 
 ble = bluetooth.BLE()
 print('bt loaded')
 scales = BLEScales(ble)
-kf = KalmanFilter(0.03, q=0.1)
+kf = [KalmanFilter(0.03, q=0.1)] * len(HX711_CONF)
 button_pin = Pin(BUTTON_PIN, Pin.IN, Pin.PULL_UP)
 vsense_pin = ADC(Pin(VSENSE_PIN))
-vsense_pin.atten(ADC.ATTN_11DB)
+try:
+    vsense_pin.atten(ADC.ATTN_11DB)
+except AttributeError:
+    # Only exists on esp32
+    pass
 bat_percent = 0
 
 hx = []
 
-def get_weight():
-    return sum([_hx.get_units() for _hx in hx])
+
+# def get_weight():
+#     return sum([_hx.get_units() for _hx in hx])
 
 
-def hx_configure():
+async def hx_configure():
     global hx, kf, filtered_weight
 
-    for hx_conf in HX711_CONF:
-        _spi = SPI(hx_conf.SPI_ID, baudrate=1000000, polarity=0, phase=0, 
-                    sck=Pin(hx_conf.SSCK), mosi=Pin(hx_conf.CLK), miso=Pin(hx_conf.DOUT))
-        _hx = HX711(pd_sck=Pin(hx_conf.CLK), dout=Pin(hx_conf.DOUT), spi=_spi, gain=HX711_GAIN)
+    print ("Configuring load cell(s)")
+    for i, hx_conf in enumerate(HX711_CONF):
+        _hx = HX711(pd_sck=hx_conf.CLK, dout=hx_conf.DOUT, gain=HX711_GAIN, callback=kf[i].update_estimate)
         _hx.set_time_constant(0)
         _hx.set_scale(1544.667)
-        _hx.tare()
         hx.append(
             _hx
         )
 
+    await asyncio.gather(*[asyncio.create_task(_hx.tare()) for _hx in hx])
+
     filtered_weight = 0
-    kf.update_estimate(get_weight())
 
 
 def tare_callback(pin):
     global hx, kf
     print("tare")
-    for _hx in hx:
-        _hx.tare(times=3)
-    kf.last_estimate = 0.0
-
-
-async def main():
-    global filtered_weight, bat_percent, scales, button_pin, hx, kf
-
-    hx_configure()
-
-    # uncomment next 2 lines to get a load cell reading for calibration (in the console/serial)
-    # while True:
-    #    print(hx.read_average(times=100))
-
-    battery_sum = 0
-    for i in range(10):
-        battery_sum += vsense_pin.read()
-    bat_percent = adc_to_percent(battery_sum / 10)
-    scales.set_battery_level(bat_percent)
-
-    asyncio.create_task(display_weight())
-
-    button_pin.irq(trigger=Pin.IRQ_FALLING, handler=tare_callback)
-
-    last = 0
-    while True:
-        await asyncio.sleep_ms(10)
-        weight = get_weight()
-        filtered_weight = kf.update_estimate(weight)
-        now = time.ticks_ms()
-        if time.ticks_diff(now, last) > 100:
-            last = now
-            rounded_weight = round(filtered_weight / 0.05) * 0.05
-            scales.set_weight(rounded_weight, notify=True)
+    asyncio.create_task(asyncio.gather(*[_hx.tare() for _hx in hx]))
+    for _kf in kf:
+        _kf.last_estimate = 0.0
 
 
 def adc_to_percent(v_adc):
@@ -122,15 +98,59 @@ def adc_to_percent(v_adc):
     return 0
 
 
+def check_battery():
+    global bat_percent
+    battery_sum = 0
+    for i in range(10):
+        battery_sum += vsense_pin.value()
+    bat_percent = adc_to_percent(battery_sum / 10)
+    scales.set_battery_level(bat_percent)
+
+
+def measure():
+    weight = sum([_kf.last_estimate for _kf in kf])
+    filtered_weight = round(weight / 0.05) * 0.05
+    scales.set_weight(filtered_weight, notify=True)
+
+
+async def main():
+    global filtered_weight, scales, button_pin, hx, kf
+
+    await hx_configure()
+
+    # uncomment next 2 lines to get a load cell reading for calibration (in the console/serial)
+    # while True:
+    #    print(hx.read_average(times=100))
+
+    check_battery()
+
+    print("Running...")
+    asyncio.create_task(display_weight())
+
+    button_pin.irq(trigger=Pin.IRQ_FALLING, handler=tare_callback)
+
+    last = 0
+    while True:
+        await asyncio.sleep_ms(80)
+        # start = time.ticks_ms()
+        # weight = get_weight()
+        # taken = time.ticks_diff(time.ticks_ms(), start)
+        # print(f"weight: {taken}")
+        # now = time.ticks_ms()
+        # if time.ticks_diff(now, last) > 100:
+        #     last = now
+        measure()
+        gc.collect()
+
+
 async def display_weight():
     global filtered_weight, bat_percent
     while True:
-        await asyncio.sleep_ms(100)
+        await asyncio.sleep_ms(80)
         screen.fill(0)
-        rounded_weight = round(filtered_weight / 0.05) * 0.05
-        string = '{:.2f}'.format(rounded_weight)
+        string = '{:.2f}'.format(filtered_weight)
         if len(string) > 6:
-            string = '{:.1f}'.format(rounded_weight)
+            string = '{:.1f}'.format(filtered_weight)
         if string == '-0.00':
             string = '0.00'
         position = 118
@@ -155,4 +175,8 @@ async def display_weight():
         screen.show()
 
 
-asyncio.run(main())
+def run():
+    asyncio.run(main())
+
+
+run()

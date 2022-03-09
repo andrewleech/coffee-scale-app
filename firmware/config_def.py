@@ -4,6 +4,8 @@ try:
 except ImportError:
     pass
 
+from machine import Pin
+
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
     __setattr__ = dict.__setitem__
@@ -12,29 +14,28 @@ class dotdict(dict):
         return self[key]
 
 
-
-SCREEN_I2C_SDA = 21
-SCREEN_I2C_SCL = 22
+SCREEN_I2C_SDA = Pin(31)
+SCREEN_I2C_SCL = Pin(29)
 
 HX711_GAIN = 64
 
 HX711_CONF = [
     dotdict(
         SPI_ID = 2,  # SPI interface to use
-        DOUT = 32,   # Connected to DOUT pin on HX711
-        CLK = 33,    # Connected to SCK pin on HX711
-        SSCK = 25,   # Dummy pin on ESP, not connected
+        DOUT = 22,   # Connected to DOUT pin on HX711
+        CLK = 24,    # Connected to SCK pin on HX711
+        SSCK = 20,   # Dummy pin on chip, not connected
     ),
     dotdict(
-        SPI_ID = 1,  # SPI interface to use
-        DOUT = 12,   # Connected to DOUT pin on HX711
-        CLK = 13,    # Connected to SCK pin on HX711
-        SSCK = 14,   # Dummy pin on ESP, not connected
+        SPI_ID = 3,  # SPI interface to use
+        DOUT = 45,   # Connected to DOUT pin on HX711
+        CLK = 42,    # Connected to SCK pin on HX711
+        SSCK = 15,   # Dummy pin on ESP, not connected
     ),
 ]
 
 
 
-BUTTON_PIN = 0
+BUTTON_PIN = Pin(16)
 
-VSENSE_PIN = 34
+VSENSE_PIN = Pin(2)

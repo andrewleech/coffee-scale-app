@@ -5,7 +5,7 @@ freeze(".", (
     "boot.py",
     "config_def.py",
     "filtering.py",
-    "hx711_spi.py",
+    "hx711.py",
     "main.py",
     "ssd1306.py",
 ), opt=0)
