@@ -8,11 +8,12 @@ class HX711:
         self.pOUT = dout
         self.spi = spi
 
-        self.pSCK(0)
+        # self.pSCK(0)
 
-        self.clock_25 = b'\xaa\xaa\xaa\xaa\xaa\xaa\x80'
-        self.clock_26 = b'\xaa\xaa\xaa\xaa\xaa\xaa\xa0'
-        self.clock_27 = b'\xaa\xaa\xaa\xaa\xaa\xaa\xa8'
+        self.clock_null = b'\x00'
+        self.clock_25 = b'\x00\xaa\xaa\xaa\xaa\xaa\xaa\x80'
+        self.clock_26 = b'\x00\xaa\xaa\xaa\xaa\xaa\xaa\xa0'
+        self.clock_27 = b'\x00\xaa\xaa\xaa\xaa\xaa\xaa\xa8'
         self.clock = self.clock_25
         self.lookup = (b'\x00\x01\x00\x00\x02\x03\x00\x00\x00\x00\x00\x00'
                        b'\x00\x00\x00\x00\x04\x05\x00\x00\x06\x07\x00\x00'
@@ -22,7 +23,7 @@ class HX711:
                        b'\x00\x00\x00\x00\x08\x09\x00\x00\x0a\x0b\x00\x00'
                        b'\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x0d\x00\x00'
                        b'\x0e\x0f')
-        self.in_data = bytearray(7)
+        self.in_data = bytearray(8)
 
         self.OFFSET = 0
         self.SCALE = 1
@@ -46,10 +47,15 @@ class HX711:
 
     def read(self):
         # wait for the device to get ready
+        single = bytearray(1)
         for _ in range(500):
+            print("self.pOUT()", self.pOUT())
             if self.pOUT() == 0:
                 break
-            time.sleep_ms(1)
+            # self.spi.write_readinto(self.clock_null, single)
+            # if not single[0]:
+            #     break
+            time.sleep_us(10)
         else:
             raise OSError("Sensor does not respond")
 
@@ -97,9 +103,9 @@ class HX711:
         elif 0 <= time_constant < 1.0:
             self.time_constant = time_constant
 
-    def power_down(self):
-        self.pSCK.value(False)
-        self.pSCK.value(True)
+    # def power_down(self):
+    #     self.pSCK.value(False)
+    #     self.pSCK.value(True)
 
-    def power_up(self):
-        self.pSCK.value(False)
+    # def power_up(self):
+    #     self.pSCK.value(False)
